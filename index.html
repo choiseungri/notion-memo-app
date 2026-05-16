@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GitHub Pages에서 바로 호스팅할 수 있는 Notion 스타일 로컬 자동저장 메모 앱" />
+  <title>Local Notion Memo</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231f2328'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand" title="Local Notion Memo">
+        <span class="brand-mark">✦</span>
+        <span class="brand-text">Local Memo</span>
+      </div>
+      <div class="tabs-wrap" aria-label="메모 탭 영역">
+        <div id="tabs" class="tabs" role="tablist" aria-label="열린 메모"></div>
+        <button id="newTabBtn" class="icon-btn new-tab" type="button" title="새 메모 추가" aria-label="새 메모 추가">＋</button>
+      </div>
+      <nav class="actions" aria-label="메모 작업">
+        <button id="copyTextBtn" class="btn" type="button" title="현재 메모 전체를 일반 텍스트로 복사">텍스트 복사</button>
+        <button id="copyMarkdownBtn" class="btn" type="button" title="현재 메모 전체를 Markdown으로 복사">Markdown 복사</button>
+        <button id="exportMarkdownBtn" class="btn" type="button" title="현재 메모를 Markdown 파일로 저장">MD 저장</button>
+        <label class="btn subtle file-label" title="Markdown 파일을 새 메모로 가져오기">
+          MD 가져오기
+          <input id="importMarkdownInput" type="file" accept=".md,text/markdown,text/plain" hidden />
+        </label>
+        <button id="backupBtn" class="btn subtle" type="button" title="모든 메모를 JSON으로 백업">백업</button>
+        <label class="btn subtle file-label" title="JSON 백업에서 복원">
+          복원
+          <input id="restoreInput" type="file" accept="application/json" hidden />
+        </label>
+        <button id="helpBtn" class="icon-btn" type="button" title="도움말" aria-label="도움말">?</button>
+        <button id="themeBtn" class="icon-btn" type="button" title="테마 전환" aria-label="테마 전환">◐</button>
+      </nav>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar" aria-label="메모 목록과 검색">
+        <div class="sidebar-header">
+          <strong>메모</strong>
+          <button id="closeSidebarBtn" class="icon-btn" type="button" aria-label="사이드패널 닫기">×</button>
+        </div>
+        <div class="search-box">
+          <input id="searchInput" type="search" placeholder="메모 검색" autocomplete="off" />
+        </div>
+        <div class="sidebar-tools">
+          <button id="archiveFilterBtn" class="chip-btn" type="button" aria-pressed="false">보관함</button>
+          <span id="storageStatus" class="storage-chip">저장소 확인 중</span>
+        </div>
+        <div id="memoList" class="memo-list"></div>
+        <div class="sidebar-footer">
+          <p>모든 내용은 <strong>브라우저 localStorage</strong>에 자동 저장됩니다.</p>
+        </div>
+      </aside>
+
+      <section class="editor-panel" aria-label="편집기">
+        <div class="editor-toolbar" role="toolbar" aria-label="텍스트 서식 도구">
+          <button class="tool-btn" data-inline="bold" type="button" title="굵게 Ctrl/Cmd+B"><strong>B</strong></button>
+          <button class="tool-btn" data-inline="italic" type="button" title="기울임 Ctrl/Cmd+I"><em>I</em></button>
+          <button class="tool-btn" data-inline="underline" type="button" title="밑줄 Ctrl/Cmd+U"><u>U</u></button>
+          <button class="tool-btn" data-inline="strikeThrough" type="button" title="취소선 Ctrl/Cmd+Shift+S"><s>S</s></button>
+          <button class="tool-btn" data-inline="code" type="button" title="인라인 코드 Ctrl/Cmd+E">&lt;/&gt;</button>
+          <button class="tool-btn" data-inline="link" type="button" title="링크 Ctrl/Cmd+K">링크</button>
+          <span class="toolbar-separator" aria-hidden="true"></span>
+          <label class="select-label">글자색
+            <select id="textColorSelect" aria-label="선택 영역 글자색">
+              <option value="">기본</option>
+              <option value="#6b7280">회색</option>
+              <option value="#ef4444">빨강</option>
+              <option value="#f97316">주황</option>
+              <option value="#eab308">노랑</option>
+              <option value="#22c55e">초록</option>
+              <option value="#3b82f6">파랑</option>
+              <option value="#8b5cf6">보라</option>
+              <option value="#ec4899">분홍</option>
+            </select>
+          </label>
+          <label class="select-label">배경
+            <select id="bgColorSelect" aria-label="선택 영역 배경색">
+              <option value="">기본</option>
+              <option value="#f3f4f6">회색</option>
+              <option value="#fee2e2">빨강</option>
+              <option value="#ffedd5">주황</option>
+              <option value="#fef3c7">노랑</option>
+              <option value="#dcfce7">초록</option>
+              <option value="#dbeafe">파랑</option>
+              <option value="#ede9fe">보라</option>
+              <option value="#fce7f3">분홍</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="memo-meta-bar" aria-label="메모 정리">
+          <button id="pinMemoBtn" class="chip-btn" type="button" aria-pressed="false">핀</button>
+          <button id="archiveMemoBtn" class="chip-btn" type="button" aria-pressed="false">보관</button>
+          <button id="deleteMemoBtn" class="chip-btn danger" type="button">메모 삭제</button>
+          <label class="tag-field">
+            <span>태그</span>
+            <input id="tagInput" type="text" placeholder="프로젝트, 아이디어" autocomplete="off" />
+          </label>
+        </div>
+
+        <article class="page">
+          <input id="memoTitle" class="page-title" aria-label="메모 제목" placeholder="제목 없음" autocomplete="off" />
+          <div id="editor" class="editor" spellcheck="true" aria-label="메모 본문 편집기"></div>
+        </article>
+      </section>
+    </main>
+
+    <div id="slashMenu" class="slash-menu" role="listbox" aria-label="슬래시 명령어"></div>
+
+    <div id="selectionToolbar" class="selection-toolbar" role="toolbar" aria-label="선택한 텍스트 서식" hidden>
+      <select class="mini-select" data-floating-font-family aria-label="폰트">
+        <option value="">폰트</option>
+        <option value="sans-serif">Sans</option>
+        <option value="serif">Serif</option>
+        <option value="monospace">Mono</option>
+      </select>
+      <select class="mini-select" data-floating-font-size aria-label="글자 크기">
+        <option value="">크기</option>
+        <option value="2">작게</option>
+        <option value="3">보통</option>
+        <option value="4">크게</option>
+        <option value="5">아주 크게</option>
+      </select>
+      <button class="tool-btn compact" data-floating-inline="bold" type="button" title="굵게"><strong>B</strong></button>
+      <button class="tool-btn compact" data-floating-inline="italic" type="button" title="기울임"><em>I</em></button>
+      <button class="tool-btn compact" data-floating-inline="underline" type="button" title="밑줄"><u>U</u></button>
+      <button class="tool-btn compact" data-floating-inline="strikeThrough" type="button" title="취소선"><s>S</s></button>
+      <button class="tool-btn compact" data-floating-inline="code" type="button" title="인라인 코드">&lt;/&gt;</button>
+      <button class="tool-btn compact" data-floating-inline="link" type="button" title="링크">링크</button>
+      <select class="mini-select" data-floating-text-color aria-label="글자색">
+        <option value="">글자색</option>
+        <option value="#6b7280">회색</option>
+        <option value="#ef4444">빨강</option>
+        <option value="#f97316">주황</option>
+        <option value="#ca8a04">노랑</option>
+        <option value="#16a34a">초록</option>
+        <option value="#2563eb">파랑</option>
+        <option value="#7c3aed">보라</option>
+        <option value="#db2777">분홍</option>
+      </select>
+      <select class="mini-select" data-floating-bg-color aria-label="배경색">
+        <option value="">배경</option>
+        <option value="#f3f4f6">회색</option>
+        <option value="#fee2e2">빨강</option>
+        <option value="#ffedd5">주황</option>
+        <option value="#fef3c7">노랑</option>
+        <option value="#dcfce7">초록</option>
+        <option value="#dbeafe">파랑</option>
+        <option value="#ede9fe">보라</option>
+        <option value="#fce7f3">분홍</option>
+      </select>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
+
+    <nav class="mobile-actionbar" aria-label="모바일 빠른 작업">
+      <button id="mobileNewBtn" type="button">＋<span>새 메모</span></button>
+      <button id="mobileListBtn" type="button">☰<span>목록</span></button>
+      <button id="mobileFormatBtn" type="button">B<span>서식</span></button>
+      <button id="mobileExportBtn" type="button">↓<span>저장</span></button>
+      <button id="mobileMoreBtn" type="button">⋯<span>메뉴</span></button>
+    </nav>
+
+    <dialog id="urlDialog" class="url-dialog">
+      <form id="urlForm" method="dialog">
+        <div class="dialog-header">
+          <h2 id="urlDialogTitle">URL 입력</h2>
+          <button class="icon-btn" value="cancel" aria-label="닫기">×</button>
+        </div>
+        <p id="urlDialogHint" class="dialog-hint"></p>
+        <input id="urlInput" class="url-input" type="url" placeholder="https://example.com" autocomplete="url" />
+        <div class="dialog-actions">
+          <button class="btn subtle" value="cancel" type="submit">취소</button>
+          <button id="urlSubmitBtn" class="btn" value="default" type="submit">적용</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="mobileMenuDialog" class="mobile-menu-dialog">
+      <form method="dialog">
+        <div class="dialog-header">
+          <h2>메뉴</h2>
+          <button class="icon-btn" value="close" aria-label="닫기">×</button>
+        </div>
+        <div class="mobile-menu-grid">
+          <button id="mobileCopyTextBtn" class="btn" value="copy-text" type="button">텍스트 복사</button>
+          <button id="mobileCopyMarkdownBtn" class="btn" value="copy-md" type="button">Markdown 복사</button>
+          <button id="mobileImportMarkdownBtn" class="btn" value="import-md" type="button">MD 가져오기</button>
+          <button id="mobileBackupBtn" class="btn" value="backup" type="button">JSON 백업</button>
+          <button id="mobileThemeBtn" class="btn" value="theme" type="button">테마 전환</button>
+          <button id="mobileHelpBtn" class="btn" value="help" type="button">도움말</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="helpDialog" class="help-dialog">
+      <form method="dialog">
+        <div class="dialog-header">
+          <h2>사용법</h2>
+          <button class="icon-btn" value="close" aria-label="닫기">×</button>
+        </div>
+        <div class="help-grid">
+          <section>
+            <h3>Markdown 단축</h3>
+            <p><kbd>#</kbd> <kbd>Space</kbd> H1 · <kbd>##</kbd> <kbd>Space</kbd> H2 · <kbd>###</kbd> <kbd>Space</kbd> H3</p>
+            <p><kbd>-</kbd>/<kbd>*</kbd>/<kbd>+</kbd> <kbd>Space</kbd> 글머리 · <kbd>1.</kbd> <kbd>Space</kbd> 번호</p>
+            <p><kbd>[]</kbd> <kbd>Space</kbd> 체크박스 · <kbd>&gt;</kbd> <kbd>Space</kbd> 토글 · <kbd>---</kbd> 구분선</p>
+          </section>
+          <section>
+            <h3>Slash 명령</h3>
+            <p><kbd>/이미지</kbd>, <kbd>/동영상</kbd>, <kbd>/인용</kbd>, <kbd>/코드</kbd>, <kbd>/색</kbd>, <kbd>/빨강 배경</kbd>처럼 입력해 블록을 변환합니다.</p>
+            <p><kbd>/turn</kbd>으로 현재 블록 타입을 바꿀 수 있습니다.</p>
+          </section>
+          <section>
+            <h3>편집</h3>
+            <p><kbd>Enter</kbd> 같은 블록 안 줄바꿈 · <kbd>Enter</kbd> 두 번 새 블록 · <kbd>Tab</kbd> 들여쓰기</p>
+            <p><kbd>Ctrl/Cmd</kbd>+<kbd>B</kbd>/<kbd>I</kbd>/<kbd>U</kbd>/<kbd>K</kbd>/<kbd>E</kbd>로 인라인 서식을 적용합니다.</p>
+          </section>
+          <section>
+            <h3>저장</h3>
+            <p>내용은 입력할 때마다 자동 저장되며, 브라우저를 닫았다가 열어도 마지막 탭과 문서가 복원됩니다.</p>
+          </section>
+        </div>
+      </form>
+    </dialog>
+  </div>
+
+  <script src="app-core.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
