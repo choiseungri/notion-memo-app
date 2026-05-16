@@ -9,6 +9,7 @@
   const els = {
     root: document.documentElement,
     app: document.getElementById('app'),
+    sidebarToggleBtn: document.getElementById('sidebarToggleBtn'),
     tabs: document.getElementById('tabs'),
     newTabBtn: document.getElementById('newTabBtn'),
     copyTextBtn: document.getElementById('copyTextBtn'),
@@ -113,6 +114,7 @@
 
   document.addEventListener('selectionchange', handleSelectionChange);
 
+  els.sidebarToggleBtn.addEventListener('click', toggleSidebar);
   els.newTabBtn.addEventListener('click', () => addMemo());
   els.copyTextBtn.addEventListener('click', () => copyCurrent('text'));
   els.copyMarkdownBtn.addEventListener('click', () => copyCurrent('markdown'));
@@ -183,7 +185,7 @@
   els.editor.addEventListener('paste', handlePaste);
   els.editor.addEventListener('copy', handleEditorCopy);
 
-  els.closeSidebarBtn.addEventListener('click', closeSidebarPanel);
+  els.closeSidebarBtn.addEventListener('click', closeSidebar);
   els.sidebarBackdrop.addEventListener('click', closeSidebarPanel);
   els.mobileNewBtn.addEventListener('click', () => addMemo());
   els.mobileListBtn.addEventListener('click', openSidebarPanel);
@@ -281,9 +283,11 @@
 
   window.addEventListener('beforeunload', () => persistState(true));
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  window.addEventListener('resize', handleViewportChange);
 
   normalizeState();
   applyTheme();
+  updateSidebarToggleState();
   renderAll();
 
   function loadState() {
@@ -1274,10 +1278,39 @@
     removeMemo(memo.id);
   }
 
+  function toggleSidebar() {
+    if (isMobileSidebar()) {
+      if (els.app.classList.contains('sidebar-open')) closeSidebarPanel();
+      else openSidebarPanel();
+      return;
+    }
+
+    if (els.app.classList.contains('sidebar-collapsed')) expandSidebar();
+    else collapseSidebar();
+  }
+
+  function closeSidebar() {
+    if (isMobileSidebar()) closeSidebarPanel();
+    else collapseSidebar();
+  }
+
+  function collapseSidebar() {
+    closeSidebarPanel();
+    els.app.classList.add('sidebar-collapsed');
+    updateSidebarToggleState();
+  }
+
+  function expandSidebar() {
+    els.app.classList.remove('sidebar-collapsed');
+    updateSidebarToggleState();
+  }
+
   function openSidebarPanel() {
+    els.app.classList.remove('sidebar-collapsed');
     els.app.classList.add('sidebar-open');
     els.sidebarBackdrop.hidden = false;
     document.body.classList.add('no-scroll');
+    updateSidebarToggleState();
     requestAnimationFrame(() => els.searchInput.focus());
   }
 
@@ -1285,6 +1318,25 @@
     els.app.classList.remove('sidebar-open');
     els.sidebarBackdrop.hidden = true;
     document.body.classList.remove('no-scroll');
+    updateSidebarToggleState();
+  }
+
+  function handleViewportChange() {
+    if (!isMobileSidebar()) closeSidebarPanel();
+    updateSidebarToggleState();
+  }
+
+  function isMobileSidebar() {
+    return window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function updateSidebarToggleState() {
+    const collapsed = els.app.classList.contains('sidebar-collapsed');
+    const open = els.app.classList.contains('sidebar-open');
+    const active = isMobileSidebar() ? open : !collapsed;
+    els.sidebarToggleBtn.setAttribute('aria-pressed', String(active));
+    els.sidebarToggleBtn.title = active ? '사이드패널 닫기' : '사이드패널 열기';
+    els.sidebarToggleBtn.setAttribute('aria-label', els.sidebarToggleBtn.title);
   }
 
   function toggleMobileToolbar() {

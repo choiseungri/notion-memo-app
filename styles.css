@@ -89,6 +89,15 @@ button {
   white-space: nowrap;
 }
 
+.sidebar-toggle {
+  flex: 0 0 auto;
+}
+
+.sidebar-toggle[aria-pressed="true"] {
+  background: var(--panel-2);
+  border-color: var(--border);
+}
+
 .brand-mark {
   display: grid;
   place-items: center;
@@ -215,6 +224,14 @@ button {
   grid-template-columns: 260px minmax(0, 1fr);
 }
 
+.sidebar-collapsed .workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar-collapsed .sidebar {
+  display: none;
+}
+
 .sidebar {
   border-right: 1px solid var(--border);
   background: var(--panel);
@@ -226,7 +243,7 @@ button {
 }
 
 .sidebar-header {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 36px;
@@ -1191,10 +1208,6 @@ kbd {
     transform: translateX(-105%);
     transition: transform 0.2s ease;
     box-shadow: var(--shadow);
-  }
-
-  .sidebar-header {
-    display: flex;
   }
 
   .sidebar-open .sidebar {
