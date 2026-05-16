@@ -23,7 +23,6 @@
     searchInput: document.getElementById('searchInput'),
     archiveFilterBtn: document.getElementById('archiveFilterBtn'),
     storageStatus: document.getElementById('storageStatus'),
-    closeSidebarBtn: document.getElementById('closeSidebarBtn'),
     memoList: document.getElementById('memoList'),
     pinMemoBtn: document.getElementById('pinMemoBtn'),
     archiveMemoBtn: document.getElementById('archiveMemoBtn'),
@@ -36,7 +35,6 @@
     toast: document.getElementById('toast'),
     sidebarBackdrop: document.getElementById('sidebarBackdrop'),
     mobileNewBtn: document.getElementById('mobileNewBtn'),
-    mobileListBtn: document.getElementById('mobileListBtn'),
     mobileFormatBtn: document.getElementById('mobileFormatBtn'),
     mobileExportBtn: document.getElementById('mobileExportBtn'),
     mobileMoreBtn: document.getElementById('mobileMoreBtn'),
@@ -185,10 +183,8 @@
   els.editor.addEventListener('paste', handlePaste);
   els.editor.addEventListener('copy', handleEditorCopy);
 
-  els.closeSidebarBtn.addEventListener('click', closeSidebar);
   els.sidebarBackdrop.addEventListener('click', closeSidebarPanel);
   els.mobileNewBtn.addEventListener('click', () => addMemo());
-  els.mobileListBtn.addEventListener('click', openSidebarPanel);
   els.mobileFormatBtn.addEventListener('click', toggleMobileToolbar);
   els.mobileExportBtn.addEventListener('click', downloadCurrentMarkdown);
   els.mobileMoreBtn.addEventListener('click', () => els.mobileMenuDialog.showModal());
@@ -1286,11 +1282,6 @@
     }
 
     if (els.app.classList.contains('sidebar-collapsed')) expandSidebar();
-    else collapseSidebar();
-  }
-
-  function closeSidebar() {
-    if (isMobileSidebar()) closeSidebarPanel();
     else collapseSidebar();
   }
 

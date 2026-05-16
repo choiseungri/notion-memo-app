@@ -1171,6 +1171,7 @@ kbd {
   .topbar {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 8px;
+    z-index: 95;
   }
 
   .brand-text {
@@ -1197,17 +1198,21 @@ kbd {
 
   .sidebar {
     position: fixed;
-    top: 0;
+    top: 58px;
     left: 0;
     bottom: 0;
     width: min(86vw, 340px);
-    min-height: 100vh;
+    min-height: calc(100vh - 58px);
     border-right: 1px solid var(--border);
     border-bottom: 0;
     z-index: 70;
     transform: translateX(-105%);
     transition: transform 0.2s ease;
     box-shadow: var(--shadow);
+  }
+
+  .sidebar-backdrop {
+    top: 58px;
   }
 
   .sidebar-open .sidebar {
@@ -1279,7 +1284,7 @@ kbd {
     bottom: 10px;
     height: 56px;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 4px;
     padding: 5px;
     border: 1px solid var(--border);
