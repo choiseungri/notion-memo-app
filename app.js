@@ -1233,10 +1233,13 @@
       && hasSoftLineBreakBeforeCaret(target);
 
     if (sameSoftBreak) {
-      removeSoftLineBreakBeforeCaret(target);
-      syncFieldToBlock(block, target);
+      const split = splitEditableAtCaret(target);
+      if (!split) {
+        removeSoftLineBreakBeforeCaret(target);
+        syncFieldToBlock(block, target);
+      }
       lastSoftBreak = null;
-      createBlockAfterDoubleEnter(block, target);
+      createBlockAfterDoubleEnter(block, target, split);
       return;
     }
 
@@ -1251,7 +1254,7 @@
     scheduleSave();
   }
 
-  function createBlockAfterDoubleEnter(block, target) {
+  function createBlockAfterDoubleEnter(block, target, split = null) {
     const memo = activeMemo();
     const index = blockIndex(block.id);
     const isEmpty = target.textContent.trim() === '';
@@ -1267,11 +1270,125 @@
     }
 
     const repeatedType = ['bullet', 'number', 'todo'].includes(block.type) ? block.type : 'p';
-    const next = createBlock(repeatedType, { indent: block.indent || 0 });
+    if (split) {
+      const field = target.dataset.field || 'html';
+      if (Object.prototype.hasOwnProperty.call(block, field)) block[field] = split.beforeHtml;
+    }
+    const next = createBlock(repeatedType, {
+      html: split ? split.afterHtml : '',
+      indent: block.indent || 0
+    });
     memo.blocks.splice(index + 1, 0, next);
     touchMemo(memo);
     renderAll(next.id, preferredFocusField(next.type));
+    if (split?.afterHtml) focusBlock(next.id, preferredFocusField(next.type), 'start');
     scheduleSave();
+  }
+
+  function splitEditableAtCaret(target) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return null;
+    const range = selection.getRangeAt(0).cloneRange();
+    if (!target.contains(range.startContainer)) return null;
+
+    const beforeRange = range.cloneRange();
+    beforeRange.selectNodeContents(target);
+    beforeRange.setEnd(range.startContainer, range.startOffset);
+
+    const afterRange = range.cloneRange();
+    afterRange.selectNodeContents(target);
+    afterRange.setStart(range.startContainer, range.startOffset);
+
+    const before = document.createElement('div');
+    const after = document.createElement('div');
+    before.appendChild(beforeRange.cloneContents());
+    after.appendChild(afterRange.cloneContents());
+
+    trimTrailingSoftBreak(before);
+    trimLeadingSoftBreak(after);
+    pruneEmptyInlineWrappers(before);
+    pruneEmptyInlineWrappers(after);
+
+    return {
+      beforeHtml: trimTrailingSoftBreakHtml(sanitizeInlineHtml(before.innerHTML)),
+      afterHtml: trimLeadingSoftBreakHtml(sanitizeInlineHtml(after.innerHTML))
+    };
+  }
+
+  function trimTrailingSoftBreakHtml(html) {
+    return String(html || '').replace(/(?:\s*<br\s*\/?>\s*)+$/gi, '');
+  }
+
+  function trimLeadingSoftBreakHtml(html) {
+    return String(html || '').replace(/^(?:\s*<br\s*\/?>\s*)+/gi, '');
+  }
+
+  function trimTrailingSoftBreak(root) {
+    while (removeTrailingSoftBreak(root)) {
+      pruneEmptyInlineWrappers(root);
+    }
+  }
+
+  function trimLeadingSoftBreak(root) {
+    while (removeLeadingSoftBreak(root)) {
+      pruneEmptyInlineWrappers(root);
+    }
+  }
+
+  function removeTrailingSoftBreak(root) {
+    const node = deepestLastChild(root);
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE && node.data === '') {
+      node.remove();
+      return true;
+    }
+    if (node.nodeType === Node.TEXT_NODE && /\n$/.test(node.data)) {
+      node.data = node.data.replace(/\n+$/, '');
+      if (!node.data) node.remove();
+      return true;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
+      node.remove();
+      return true;
+    }
+    return false;
+  }
+
+  function removeLeadingSoftBreak(root) {
+    const node = deepestFirstChild(root);
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE && node.data === '') {
+      node.remove();
+      return true;
+    }
+    if (node.nodeType === Node.TEXT_NODE && /^\n/.test(node.data)) {
+      node.data = node.data.replace(/^\n+/, '');
+      if (!node.data) node.remove();
+      return true;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
+      node.remove();
+      return true;
+    }
+    return false;
+  }
+
+  function deepestLastChild(root) {
+    let node = root.lastChild;
+    while (node && node.lastChild) node = node.lastChild;
+    return node;
+  }
+
+  function deepestFirstChild(root) {
+    let node = root.firstChild;
+    while (node && node.firstChild) node = node.firstChild;
+    return node;
+  }
+
+  function pruneEmptyInlineWrappers(root) {
+    Array.from(root.querySelectorAll('span,strong,b,em,i,u,s,strike,code,a')).reverse().forEach((element) => {
+      if (!element.textContent && !element.querySelector('br')) element.remove();
+    });
   }
 
   function syncFieldToBlock(block, target) {
