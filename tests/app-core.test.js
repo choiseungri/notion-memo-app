@@ -78,6 +78,22 @@ test('inlineHtmlToMarkdown strips styled spans but keeps semantic inline markdow
   assert.equal(core.inlineHtmlToMarkdown('<strong>굵게</strong> <em>기울임</em>'), '**굵게** *기울임*');
 });
 
+test('normalizePastedStyle keeps only safe pasted text color', () => {
+  assert.equal(
+    core.normalizePastedStyle('color: rgb(202, 138, 4); font-size: 42px; background-image: url(javascript:alert(1));'),
+    'color:rgb(202, 138, 4)'
+  );
+  assert.equal(core.normalizePastedStyle('color: expression(alert(1)); background-color: #dcfce7'), '');
+  assert.equal(core.normalizePastedStyle('COLOR: #ca8a04; position: fixed'), 'color:#ca8a04');
+});
+
+test('isSafePastedImageSource allows embeddable images and rejects scriptable sources', () => {
+  assert.equal(core.isSafePastedImageSource('https://example.com/image.png'), true);
+  assert.equal(core.isSafePastedImageSource('data:image/png;base64,abc123'), true);
+  assert.equal(core.isSafePastedImageSource('javascript:alert(1)'), false);
+  assert.equal(core.isSafePastedImageSource('data:text/html,<script>alert(1)</script>'), false);
+});
+
 test('formatBytes uses readable storage units', () => {
   assert.equal(core.formatBytes(0), '0 B');
   assert.equal(core.formatBytes(1536), '1.5 KB');

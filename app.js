@@ -848,32 +848,319 @@
   }
 
   function handlePaste(event) {
-    const target = event.target.closest('[contenteditable][data-field]');
+    const target = event.target.closest('[contenteditable]');
     if (!target) return;
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
 
-    const items = Array.from(event.clipboardData?.items || []);
+    const items = Array.from(clipboard.items || []);
     const imageItem = items.find((item) => item.type.startsWith('image/'));
-    if (!imageItem) return;
+    const html = clipboard.getData('text/html');
+    const markdown = clipboard.getData('text/markdown');
+    const plain = clipboard.getData('text/plain');
+
+    if (!imageItem && !html && !markdown && !plain) return;
 
     event.preventDefault();
+    const block = blockFromEditable(target);
+
+    if (imageItem) {
+      insertImageFileFromClipboard(imageItem, target);
+      return;
+    }
+
+    if (block?.type === 'code') {
+      insertPlainTextAtSelection(target, plain || htmlToPlainText(html) || markdown);
+      syncEditableAfterPaste(target);
+      return;
+    }
+
+    const pasted = html ? sanitizePastedHtml(html) : markdownToPasteParts(markdown || plain);
+    if (pasted.html) {
+      insertHtmlAtSelection(target, pasted.html);
+    } else if (plain || markdown) {
+      insertPlainTextAtSelection(target, plain || markdown);
+    }
+
+    syncEditableAfterPaste(target);
+    const imageBlocks = insertPastedImageBlocks(target, pasted.images);
+    if (imageBlocks.length) {
+      touchMemo(activeMemo());
+      renderAll(imageBlocks[0].id, 'captionHtml');
+      scheduleSave();
+    }
+  }
+
+  function insertImageFileFromClipboard(imageItem, target) {
     const file = imageItem.getAsFile();
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = () => {
-      const blockId = target.closest('[data-block-id]').dataset.blockId;
-      const index = blockIndex(blockId);
-      const block = createBlock('image', {
+      const imageBlocks = insertPastedImageBlocks(target, [{
         src: reader.result,
-        captionHtml: escapeHtml(file.name || '붙여넣은 이미지')
-      });
-      activeMemo().blocks.splice(index + 1, 0, block);
+        alt: file.name || 'pasted image'
+      }]);
+      if (!imageBlocks.length) return;
       touchMemo(activeMemo());
-      renderAll(block.id, 'captionHtml');
+      renderAll(imageBlocks[0].id, 'captionHtml');
       scheduleSave();
-      showToast('이미지를 새 블록으로 붙여넣었습니다.');
+      showToast('?대?吏瑜???釉붾줉?쇰줈 遺숈뿬?ｌ뿀?듬땲??');
     };
     reader.readAsDataURL(file);
+  }
+
+  function sanitizePastedHtml(html) {
+    const source = document.createElement('div');
+    const output = document.createElement('div');
+    const images = [];
+    source.innerHTML = String(html || '');
+    Array.from(source.childNodes).forEach((node) => appendSanitizedPasteNode(node, output, images));
+    trimPastedEdgeBreaks(output);
+    return {
+      html: normalizePastedBreaks(output.innerHTML),
+      images
+    };
+  }
+
+  function appendSanitizedPasteNode(node, parent, images) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parent.appendChild(document.createTextNode(node.textContent || ''));
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'link') return;
+    if (tag === 'br') {
+      appendBreak(parent);
+      return;
+    }
+    if (tag === 'img') {
+      addPastedImage(node, images);
+      return;
+    }
+
+    const isBlock = isPasteBlockElement(tag);
+    if (isBlock) appendBreak(parent);
+
+    let container = parent;
+    for (const wrapperTag of pasteWrapperTags(node)) {
+      const wrapper = document.createElement(wrapperTag);
+      if (wrapperTag === 'a') {
+        const href = safeUrl(node.getAttribute('href') || '');
+        if (!href) continue;
+        wrapper.setAttribute('href', href);
+        wrapper.setAttribute('target', '_blank');
+        wrapper.setAttribute('rel', 'noopener noreferrer');
+      }
+      container.appendChild(wrapper);
+      container = wrapper;
+    }
+
+    const pastedStyle = core.normalizePastedStyle(node.getAttribute('style') || '');
+    if (pastedStyle) {
+      const span = document.createElement('span');
+      span.setAttribute('style', pastedStyle);
+      container.appendChild(span);
+      container = span;
+    }
+
+    Array.from(node.childNodes).forEach((child) => appendSanitizedPasteNode(child, container, images));
+    if (isBlock) appendBreak(parent);
+  }
+
+  function pasteWrapperTags(element) {
+    const tag = element.tagName.toLowerCase();
+    const style = element.getAttribute('style') || '';
+    const wrappers = [];
+    const add = (value) => {
+      if (!wrappers.includes(value)) wrappers.push(value);
+    };
+
+    if (tag === 'strong' || tag === 'b' || hasPasteBold(style)) add('strong');
+    if (tag === 'em' || tag === 'i' || hasPasteItalic(style)) add('em');
+    if (tag === 'u' || hasPasteUnderline(style)) add('u');
+    if (tag === 's' || tag === 'strike' || tag === 'del' || hasPasteStrike(style)) add('s');
+    if (tag === 'code') add('code');
+    if (tag === 'a') add('a');
+    return wrappers;
+  }
+
+  function hasPasteBold(style) {
+    const value = pasteStyleValue(style, 'font-weight').toLowerCase();
+    if (!value) return false;
+    if (value === 'bold' || value === 'bolder') return true;
+    const weight = Number(value);
+    return Number.isFinite(weight) && weight >= 600;
+  }
+
+  function hasPasteItalic(style) {
+    return /italic|oblique/i.test(pasteStyleValue(style, 'font-style'));
+  }
+
+  function hasPasteUnderline(style) {
+    return /underline/i.test(pasteStyleValue(style, 'text-decoration') || pasteStyleValue(style, 'text-decoration-line'));
+  }
+
+  function hasPasteStrike(style) {
+    return /line-through/i.test(pasteStyleValue(style, 'text-decoration') || pasteStyleValue(style, 'text-decoration-line'));
+  }
+
+  function pasteStyleValue(style, property) {
+    const declarations = String(style || '').split(';');
+    for (const declaration of declarations) {
+      const colonIndex = declaration.indexOf(':');
+      if (colonIndex < 0) continue;
+      const name = declaration.slice(0, colonIndex).trim().toLowerCase();
+      if (name === property) return declaration.slice(colonIndex + 1).trim();
+    }
+    return '';
+  }
+
+  function isPasteBlockElement(tag) {
+    return new Set(['address', 'article', 'aside', 'blockquote', 'div', 'figcaption', 'figure', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'li', 'main', 'ol', 'p', 'pre', 'section', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul']).has(tag);
+  }
+
+  function appendBreak(parent) {
+    const last = parent.lastChild;
+    if (!last) return;
+    if (last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR') return;
+    parent.appendChild(document.createElement('br'));
+  }
+
+  function normalizePastedBreaks(html) {
+    return String(html || '')
+      .replace(/(?:<br>\s*){3,}/gi, '<br><br>')
+      .replace(/^(?:\s*<br>\s*)+/gi, '')
+      .replace(/(?:\s*<br>\s*)+$/gi, '');
+  }
+
+  function trimPastedEdgeBreaks(element) {
+    const trim = (node) => {
+      while (node.firstChild && node.firstChild.nodeType === Node.ELEMENT_NODE && node.firstChild.tagName === 'BR') {
+        node.firstChild.remove();
+      }
+      while (node.lastChild && node.lastChild.nodeType === Node.ELEMENT_NODE && node.lastChild.tagName === 'BR') {
+        node.lastChild.remove();
+      }
+    };
+    trim(element);
+    element.querySelectorAll('span,strong,em,u,s,code,a').forEach(trim);
+  }
+
+  function addPastedImage(image, images) {
+    const src = image.getAttribute('src') || '';
+    if (!core.isSafePastedImageSource(src)) return;
+    images.push({
+      src: safeUrl(src),
+      alt: image.getAttribute('alt') || image.getAttribute('title') || ''
+    });
+  }
+
+  function markdownToPasteParts(text) {
+    const images = [];
+    const withoutImages = String(text || '').replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
+      if (!core.isSafePastedImageSource(src)) return match;
+      images.push({ src: safeUrl(src), alt });
+      return alt || '';
+    });
+    return {
+      html: markdownInlineToPasteHtml(withoutImages),
+      images
+    };
+  }
+
+  function markdownInlineToPasteHtml(text) {
+    let html = escapeHtml(String(text || ''));
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    html = html.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+    html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    html = html.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_match, label, href) => {
+      const url = safeUrl(href);
+      return url ? `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label;
+    });
+    return html.replace(/\r\n?/g, '\n').replace(/\n/g, '<br>');
+  }
+
+  function insertHtmlAtSelection(target, html) {
+    if (!html) return false;
+    target.focus();
+    const selection = window.getSelection();
+    const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+    if (!range || !target.contains(range.commonAncestorContainer)) {
+      target.insertAdjacentHTML('beforeend', html);
+      return true;
+    }
+
+    range.deleteContents();
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const fragment = template.content;
+    const lastNode = fragment.lastChild;
+    range.insertNode(fragment);
+    if (lastNode) {
+      const nextRange = document.createRange();
+      nextRange.setStartAfter(lastNode);
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+    }
+    return true;
+  }
+
+  function insertPlainTextAtSelection(target, text) {
+    return insertHtmlAtSelection(target, escapeHtml(text).replace(/\r\n?/g, '\n').replace(/\n/g, '<br>'));
+  }
+
+  function blockFromEditable(target) {
+    const blockEl = target.closest('[data-block-id]');
+    return blockEl ? blockById(blockEl.dataset.blockId) : null;
+  }
+
+  function syncEditableAfterPaste(target) {
+    const tableCell = target.closest('[data-table-cell]');
+    if (tableCell) {
+      const blockEl = tableCell.closest('[data-block-id]');
+      const block = blockEl ? blockById(blockEl.dataset.blockId) : null;
+      if (!block || block.type !== 'table') return null;
+      const row = Number(tableCell.dataset.row);
+      const col = Number(tableCell.dataset.col);
+      if (!Array.isArray(block.rows[row])) block.rows[row] = [];
+      block.rows[row][col] = sanitizeInlineHtml(tableCell.innerHTML);
+      touchMemo(activeMemo());
+      scheduleSave();
+      renderTabs();
+      renderMemoList();
+      return block;
+    }
+
+    const block = blockFromEditable(target);
+    if (!block) return null;
+    syncFieldToBlock(block, target);
+    touchMemo(activeMemo());
+    scheduleSave();
+    renderTabs();
+    renderMemoList();
+    return block;
+  }
+
+  function insertPastedImageBlocks(target, images) {
+    const block = blockFromEditable(target);
+    const index = block ? blockIndex(block.id) : -1;
+    if (index < 0) return [];
+    const imageBlocks = images
+      .filter((image) => core.isSafePastedImageSource(image.src))
+      .map((image) => createBlock('image', {
+        src: safeUrl(image.src),
+        captionHtml: escapeHtml(image.alt || '')
+      }));
+    if (!imageBlocks.length) return [];
+    activeMemo().blocks.splice(index + 1, 0, ...imageBlocks);
+    return imageBlocks;
   }
 
   function isFormattingShortcut(event) {

@@ -265,6 +265,38 @@
       .replace(/&#0?39;/g, "'");
   }
 
+  function normalizePastedStyle(style) {
+    const declarations = String(style || '').split(';');
+    for (const declaration of declarations) {
+      const colonIndex = declaration.indexOf(':');
+      if (colonIndex < 0) continue;
+      const property = declaration.slice(0, colonIndex).trim().toLowerCase();
+      const value = declaration.slice(colonIndex + 1).trim();
+      if (property === 'color' && isSafeCssColor(value)) return `color:${value}`;
+    }
+    return '';
+  }
+
+  function isSafeCssColor(value) {
+    const raw = String(value || '').trim();
+    if (/^#[0-9a-f]{3,8}$/i.test(raw)) return true;
+    const rgb = /^rgba?\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})(?:\s*,\s*(0|1|0?\.\d+))?\s*\)$/i.exec(raw);
+    if (!rgb) return false;
+    return rgb.slice(1, 4).every((part) => Number(part) >= 0 && Number(part) <= 255);
+  }
+
+  function isSafePastedImageSource(src) {
+    const value = String(src || '').trim();
+    if (!value) return false;
+    if (/^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(value)) return true;
+    try {
+      const url = new URL(value, 'https://paste.local/');
+      return ['http:', 'https:', 'blob:'].includes(url.protocol);
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function escapeHtml(value) {
     return String(value || '')
       .replace(/&/g, '&amp;')
@@ -287,7 +319,9 @@
     formatBytes,
     htmlToPlainText,
     inlineHtmlToMarkdown,
+    isSafePastedImageSource,
     memoSearchText,
+    normalizePastedStyle,
     normalizeTag,
     normalizeTags,
     parseMarkdownDocument,
